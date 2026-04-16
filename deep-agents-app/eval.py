@@ -43,12 +43,9 @@ async def _call_agent(user_message: str, user_id: str = "eval-user", thread_id: 
         embedding_endpoint=EMBEDDING_ENDPOINT,
         embedding_dims=EMBEDDING_DIMS,
     ) as store:
-        await store.setup()
-
         async with AsyncCheckpointSaver(
             instance_name=LAKEBASE_INSTANCE_NAME,
         ) as checkpointer:
-            await checkpointer.setup()
 
             mcp_tools = await _load_mcp_tools()
             deep_agent = _build_agent(store, checkpointer, mcp_tools)

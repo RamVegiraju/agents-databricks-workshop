@@ -1,0 +1,12 @@
+README.md
+pyproject.toml
+agent/__init__.py
+agent/agent.py
+agent/memory.py
+agent/server.py
+hello_world_agent.egg-info/PKG-INFO
+hello_world_agent.egg-info/SOURCES.txt
+hello_world_agent.egg-info/dependency_links.txt
+hello_world_agent.egg-info/entry_points.txt
+hello_world_agent.egg-info/requires.txt
+hello_world_agent.egg-info/top_level.txt

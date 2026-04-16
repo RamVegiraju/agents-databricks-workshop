@@ -10,11 +10,13 @@ resources:
       resources:
         - name: "database"
           database:
-            instance_name: "<your-lakebase-instance-name>"
-            database_name: "postgres"
+            instance_name: "agent-memory"
+            database_name: "databricks_postgres"
             permission: "CAN_CONNECT_AND_CREATE"
 
 targets:
   dev:
     mode: development
     default: true
+    workspace:
+      profile: DEFAULT  # Set to your Databricks CLI profile name

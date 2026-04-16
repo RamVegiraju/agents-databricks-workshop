@@ -144,9 +144,7 @@ async def streaming(
     }
 
     async with get_store() as store:
-        await store.setup()
         async with get_checkpointer() as checkpointer:
-            await checkpointer.setup()
 
             config: dict[str, Any] = {
                 "configurable": {

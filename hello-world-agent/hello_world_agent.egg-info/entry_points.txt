@@ -1,0 +1,2 @@
+[console_scripts]
+start-app = start_server:main

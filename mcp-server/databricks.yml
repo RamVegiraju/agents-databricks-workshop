@@ -12,3 +12,5 @@ targets:
   dev:
     mode: development
     default: true
+    workspace:
+      profile: DEFAULT  # Set to your Databricks CLI profile name

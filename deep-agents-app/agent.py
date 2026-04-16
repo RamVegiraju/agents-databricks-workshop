@@ -156,6 +156,7 @@ async def _load_mcp_tools():
 
 def _build_agent(store, checkpointer, mcp_tools):
     """Build the deep-agent with subagents, CompositeBackend memory, and MCP tools."""
+    from databricks_langchain import ChatDatabricks
     from deepagents import create_deep_agent
     from deepagents.backends import CompositeBackend, StateBackend, StoreBackend
 
@@ -163,9 +164,11 @@ def _build_agent(store, checkpointer, mcp_tools):
         current_date=datetime.now(timezone.utc).strftime("%Y-%m-%d"),
     )
 
+    llm = ChatDatabricks(endpoint=MODEL)
+
     return create_deep_agent(
         name="research-assistant",
-        model=MODEL,
+        model=llm,
         system_prompt=system_prompt,
         subagents=SUBAGENTS,
         tools=mcp_tools,
@@ -215,8 +218,13 @@ async def _process_agent_astream_events(
 
         if mode == "updates":
             for node_data in payload.values():
+                if not node_data or not isinstance(node_data, dict):
+                    continue
                 messages = node_data.get("messages", [])
-                if not messages:
+                # deep-agents middleware may wrap messages in an Overwrite object
+                if hasattr(messages, "value"):
+                    messages = messages.value
+                if not messages or not isinstance(messages, list):
                     continue
                 for msg in messages:
                     _normalize_ai_message_content(msg)
@@ -298,12 +306,9 @@ async def streaming(
         embedding_endpoint=EMBEDDING_ENDPOINT,
         embedding_dims=EMBEDDING_DIMS,
     ) as store:
-        await store.setup()
-
         async with AsyncCheckpointSaver(
             instance_name=LAKEBASE_INSTANCE_NAME,
         ) as checkpointer:
-            await checkpointer.setup()
 
             config: dict[str, Any] = {
                 "configurable": {

@@ -66,9 +66,7 @@ TEST_CASES = [
 async def _run_agent(user_input: str, user_id: str) -> str:
     """Run the agent on a single input and return its text response."""
     async with get_store() as store:
-        await store.setup()
         async with get_checkpointer() as checkpointer:
-            await checkpointer.setup()
             agent = await init_agent(store, checkpointer)
 
             config = {

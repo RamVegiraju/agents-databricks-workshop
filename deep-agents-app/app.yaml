@@ -1,12 +1,12 @@
-command: ["uv", "run", "streamlit", "run", "streamlit_app.py", "--server.port", "8000", "--server.address", "0.0.0.0"]
+command: ["uv", "run", "python", "start_server.py"]
 
 env:
   - name: MLFLOW_TRACKING_URI
     value: "databricks"
   - name: MCP_SERVER_URL
-    value: "<your-mcp-server-url>/mcp"
+    value: "https://<your-mcp-app-url>/mcp"  # Update after deploying mcp-server (Part 2)
   - name: LAKEBASE_INSTANCE_NAME
-    value: "<your-lakebase-instance-name>"
+    value: "agent-memory"
   - name: EMBEDDING_ENDPOINT
     value: "databricks-gte-large-en"
   - name: EMBEDDING_DIMS

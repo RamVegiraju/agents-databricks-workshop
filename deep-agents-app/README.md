@@ -2,61 +2,6 @@
 
 An advanced research assistant that demonstrates the **deep-agents** framework with subagent delegation, composite memory, MCP tool integration, and Lakebase-backed persistence.
 
-## Architecture
-
-```
-                          +-----------------------+
-                          |    Streamlit Frontend  |
-                          |  (multi-user, threads) |
-                          +-----------+-----------+
-                                      |
-                                      v
-                          +-----------+-----------+
-                          |   MLflow AgentServer   |
-                          |   (ResponsesAgent)     |
-                          +-----------+-----------+
-                                      |
-                    +-----------------+-----------------+
-                    |                                   |
-                    v                                   v
-          +---------+---------+               +---------+---------+
-          |  MCP Server       |               |  Main Deep Agent  |
-          |  (shared tools:   |               |  (orchestrator)   |
-          |   time, math,     |               +---------+---------+
-          |   employee lookup) |                        |
-          +-------------------+          +-------------+-------------+
-                                         |                           |
-                                         v                           v
-                               +---------+---------+       +---------+---------+
-                               | Researcher        |       | Fact-Checker      |
-                               | Subagent          |       | Subagent          |
-                               | (deep-dive        |       | (claim            |
-                               |  research)        |       |  verification)    |
-                               +-------------------+       +-------------------+
-
-                          +-----------+-----------+
-                          |  CompositeBackend      |
-                          |  Memory Layer          |
-                          +-----------+-----------+
-                                      |
-                    +-----------------+-----------------+
-                    |                                   |
-                    v                                   v
-          +---------+---------+               +---------+---------+
-          | StateBackend      |               | StoreBackend      |
-          | (ephemeral,       |               | (/memories/,      |
-          |  /scratch/)       |               |  persistent)      |
-          +-------------------+               +---------+---------+
-                                                        |
-                                                        v
-                                              +---------+---------+
-                                              |     Lakebase      |
-                                              | (AsyncCheckpoint- |
-                                              |  Saver + Async-   |
-                                              |  DatabricksStore) |
-                                              +-------------------+
-```
-
 ## What This Demonstrates
 
 | Feature | Implementation |
@@ -69,126 +14,109 @@ An advanced research assistant that demonstrates the **deep-agents** framework w
 | **Lakebase persistence** | `AsyncCheckpointSaver` for conversation history + `AsyncDatabricksStore` for long-term memory |
 | **TodoListMiddleware** | Multi-step task planning for complex research queries |
 | **MLflow ResponsesAgent** | `@invoke` and `@stream` handlers with tracing |
-| **Streamlit frontend** | Multi-user sessions, thread management, suggested prompts |
 | **MLflow evaluation** | Custom and built-in scorers for research quality, safety, and structure |
+
+## Architecture
+
+```
+                      +---------------------+
+                      |  MLflow AgentServer  |
+                      |  (ResponsesAgent)    |
+                      +---------+-----------+
+                                |
+                  +-------------+-------------+
+                  |                           |
+                  v                           v
+        +---------+---------+       +---------+---------+
+        |  MCP Server       |       |  Main Deep Agent  |
+        |  (shared tools:   |       |  (orchestrator)   |
+        |   time, math,     |       +---------+---------+
+        |   employee lookup) |                |
+        +-------------------+    +-----------+-----------+
+                                 |                       |
+                                 v                       v
+                       +---------+-------+     +---------+-------+
+                       | Researcher      |     | Fact-Checker    |
+                       | Subagent        |     | Subagent        |
+                       +-----------------+     +-----------------+
+
+                      +---------------------+
+                      |  CompositeBackend    |
+                      +---------+-----------+
+                                |
+                  +-------------+-------------+
+                  |                           |
+                  v                           v
+        +---------+---------+       +---------+---------+
+        | StateBackend      |       | StoreBackend      |
+        | (ephemeral,       |       | (/memories/,      |
+        |  /scratch/)       |       |  persistent)      |
+        +-------------------+       +---------+---------+
+                                              |
+                                              v
+                                    +---------+---------+
+                                    |     Lakebase      |
+                                    +-------------------+
+```
 
 ## How Memory Works
 
 The agent uses a three-tier memory architecture via `CompositeBackend`:
 
-### Short-term Memory (AsyncCheckpointSaver)
-- **Scope**: Per `thread_id`
-- **Lifetime**: Persists across messages within a thread
-- **Content**: Full conversation history, intermediate state
-- **Backend**: Lakebase via `AsyncCheckpointSaver`
+| Tier | Backend | Scope | Lifetime | Example |
+|------|---------|-------|----------|---------|
+| **Short-term** | AsyncCheckpointSaver | Per `thread_id` | Within a thread | Conversation history |
+| **Long-term** | StoreBackend at `/memories/` | Per `user_id` | Across threads/sessions | User preferences, findings |
+| **Ephemeral** | StateBackend at `/scratch/` | Current thread | Lost when thread ends | Intermediate reasoning |
 
-### Long-term Memory (StoreBackend at `/memories/`)
-- **Scope**: Per `user_id`
-- **Lifetime**: Persists across threads and sessions
-- **Content**: User preferences (`/memories/preferences.txt`), key findings (`/memories/findings.txt`)
-- **Backend**: Lakebase via `AsyncDatabricksStore` routed through `StoreBackend`
+## Project Structure
 
-### Ephemeral Memory (StateBackend)
-- **Scope**: Current thread only
-- **Lifetime**: Lost when thread ends
-- **Content**: Scratch notes (`/scratch/notes.txt`), intermediate reasoning
-- **Backend**: In-memory via `StateBackend`
-
-### How the Agent Uses Memory
-
-The system prompt instructs the agent to:
-1. **Read** from `/memories/` at the start of conversations to personalize responses
-2. **Write** user preferences to `/memories/preferences.txt` when the user expresses them
-3. **Write** key findings to `/memories/findings.txt` for cross-session reference
-4. **Use** `/scratch/` for intermediate notes that don't need to persist
-
-## Context Engineering Patterns
-
-The system prompts follow context engineering best practices:
-
-- **Role definition**: "You are an expert research assistant deployed on Databricks Apps"
-- **Capability enumeration**: Numbered list of what the agent can do
-- **Guidelines**: Specific behavioral instructions (when to use todo lists, what to save, how to present research)
-- **Response format**: Explicit formatting expectations (lead with findings, use bullet points, include Next Steps)
-- **Subagent prompts**: Focused, role-specific instructions for each subagent
-
-## Getting Started
-
-### Prerequisites
-
-1. **Deploy the shared MCP server** from `../mcp-server/`
-2. **Provision a Lakebase instance** in your Databricks workspace
-3. **Configure environment variables** (copy `.env.example` to `.env` and fill in values)
-
-### Local Development
-
-```bash
-# Install dependencies
-uv sync
-
-# Copy and configure environment
-cp .env.example .env
-# Edit .env with your values
-
-# Run the agent server
-uv run python start_server.py
-
-# In a separate terminal, run the Streamlit frontend
-uv run streamlit run streamlit_app.py
+```
+deep-agents-app/
+  agent.py               # Agent: deep-agents + subagents + CompositeBackend
+  start_server.py        # AgentServer entrypoint
+  test_agent.py          # Test script with memory, research, tools demos
+  eval.py                # MLflow GenAI evaluation harness
+  pyproject.toml         # Python project config
+  app.yaml               # Databricks App config
+  databricks.yml         # DABs bundle config
+  .env.example           # Environment variable template
 ```
 
-### Deploy to Databricks Apps
+## Setup
+
+See the [main README](../README.md) for full deployment instructions (Part 4).
+
+Quick version:
 
 ```bash
-# Update databricks.yml and app.yaml with your instance names and URLs
+cp .env.example .env       # Edit with your workspace details
+databricks bundle deploy
+databricks bundle run deep_agents_app
 
-# Deploy with Databricks Asset Bundles
-databricks bundle deploy --target dev
-
-# Launch the app
-databricks bundle run deep_agents_app --target dev
+# Grant permissions (from this directory)
+uv run python ../setup_lakebase_permissions.py --app-name agent-research-assistant --instance agent-memory --skip-init
+uv run python ../grant_mcp_permissions.py --agent-app agent-research-assistant --mcp-app agent-mcp-server
 ```
 
-### Setup Permissions
+## Testing
 
-1. Ensure the app service principal has access to the Lakebase instance
-2. Grant the service principal access to the MCP server app
-3. Grant access to the `databricks-claude-opus-4-5` model serving endpoint
-4. Grant access to the `databricks-gte-large-en` embedding endpoint
+```bash
+uv run python test_agent.py                # Run all demos
+uv run python test_agent.py --demo memory    # Long-term memory persistence
+uv run python test_agent.py --demo research  # Subagent delegation
+uv run python test_agent.py --demo tools     # MCP tools
+```
+
+The research demo shows subagent delegation — look for `>> Delegated to subagent: researcher` in the output.
 
 ## Running Evaluation
 
 ```bash
-# Run the evaluation harness
 uv run python eval.py
 ```
 
-The evaluation includes 6 test cases covering:
-- **Research quality**: Does the agent produce structured, informative research?
-- **Memory save**: Does the agent acknowledge and save user preferences?
-- **Memory recall**: Does the agent read from `/memories/` and personalize responses?
-- **Fact-checking**: Does the agent delegate to the fact-checker and provide ratings?
-- **Safety**: Does the agent handle adversarial prompts safely?
-- **Structured output**: Does the agent use headers, bullets, and clear formatting?
-
-Scorers:
-- `Safety` — built-in safety scorer
-- `Correctness` — checks response against expected output
-- `Guidelines("research_quality")` — custom guideline for research depth
-- `Guidelines("structured_output")` — custom guideline for formatting
-- `response_structure` — custom scorer checking bullets, headers, and error-free output
-
-## Running Streamlit Locally
-
-```bash
-uv run streamlit run streamlit_app.py
-```
-
-Features:
-- **User profiles**: Switch between preset users (Alice, Bob, Carol) or enter a custom ID
-- **Thread management**: Create new threads, switch between them, see message counts
-- **Suggested prompts**: Quick-start buttons for common research tasks
-- **Memory sidebar**: Visual explanation of the three-tier memory architecture
+6 test cases covering research quality, memory operations, fact-checking, safety, and structured output.
 
 ## How to Extend
 
@@ -202,7 +130,7 @@ SUBAGENTS = [
     {
         "name": "summarizer",
         "description": "A summarization specialist that condenses long documents...",
-        "prompt": "You are a summarization specialist. Your job is to...",
+        "system_prompt": "You are a summarization specialist. Your job is to...",
     },
 ]
 ```
@@ -228,16 +156,16 @@ agent = create_deep_agent(
 
 ### Adding New Memory Paths
 
-Extend the `CompositeBackend` routes to add new persistent paths:
+Extend the `CompositeBackend` routes:
 
 ```python
 backend=lambda rt: CompositeBackend(
     default=StateBackend(rt),
     routes={
         "/memories/": StoreBackend(rt),
-        "/shared/": StoreBackend(rt),  # new shared memory path
+        "/shared/": StoreBackend(rt),  # new persistent path
     },
 ),
 ```
 
-Update the system prompt to instruct the agent on when and how to use the new path.
+Update the system prompt to instruct the agent on when to use the new path.

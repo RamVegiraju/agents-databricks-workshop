@@ -14,6 +14,10 @@ import os
 import uuid
 from datetime import datetime, timezone
 
+# Resolve oauth+pat auth conflict before any SDK import.
+if os.environ.get("DATABRICKS_CLIENT_ID") and os.environ.get("DATABRICKS_CLIENT_SECRET"):
+    os.environ.pop("DATABRICKS_TOKEN", None)
+
 import streamlit as st
 from dotenv import load_dotenv
 
@@ -82,12 +86,9 @@ async def call_agent(user_message: str, user_id: str, thread_id: str) -> str:
         embedding_endpoint=EMBEDDING_ENDPOINT,
         embedding_dims=EMBEDDING_DIMS,
     ) as store:
-        await store.setup()
-
         async with AsyncCheckpointSaver(
             instance_name=LAKEBASE_INSTANCE_NAME,
         ) as checkpointer:
-            await checkpointer.setup()
 
             mcp_tools = await _load_mcp_tools()
             deep_agent = _build_agent(store, checkpointer, mcp_tools)

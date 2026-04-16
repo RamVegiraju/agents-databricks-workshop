@@ -1,0 +1,8 @@
+mlflow>=3.0.0
+langchain-core>=0.3.0
+databricks-langchain[memory]>=0.16.0
+langgraph>=0.3.0
+databricks-sdk>=0.40.0
+databricks-mcp>=0.3.0
+python-dotenv>=1.0.0
+streamlit>=1.38

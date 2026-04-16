@@ -7,13 +7,14 @@ from a deployed Databricks App, and explicit memory tools.
 
 import os
 
-from databricks.sdk import WorkspaceClient
 from databricks_langchain import (
     ChatDatabricks,
     DatabricksMCPServer,
     DatabricksMultiServerMCPClient,
 )
 from langgraph.prebuilt import create_react_agent
+
+from databricks.sdk import WorkspaceClient
 
 from agent.memory import get_memory_tools
 

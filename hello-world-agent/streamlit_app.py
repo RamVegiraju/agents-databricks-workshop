@@ -10,6 +10,15 @@ import os
 import sys
 import uuid
 
+# ---------------------------------------------------------------------------
+# Resolve auth conflict BEFORE any SDK import.
+# Databricks Apps inject both DATABRICKS_TOKEN (PAT) and OAuth SP creds
+# (CLIENT_ID / CLIENT_SECRET).  The SDK rejects dual auth, so we drop the
+# PAT when OAuth creds are present — the app should use OAuth only.
+# ---------------------------------------------------------------------------
+if os.environ.get("DATABRICKS_CLIENT_ID") and os.environ.get("DATABRICKS_CLIENT_SECRET"):
+    os.environ.pop("DATABRICKS_TOKEN", None)
+
 import streamlit as st
 from dotenv import load_dotenv
 
@@ -101,9 +110,7 @@ if not st.session_state["messages"]:
 async def _run_agent(user_input: str, user_id: str, thread_id: str) -> str:
     """Run the agent with per-request context managers and return the reply."""
     async with get_store() as store:
-        await store.setup()
         async with get_checkpointer() as checkpointer:
-            await checkpointer.setup()
             agent = await init_agent(store, checkpointer)
 
             config = {

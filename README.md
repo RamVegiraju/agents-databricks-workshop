@@ -1,368 +1,314 @@
 # Databricks Agentic AI Samples
 
-End-to-end samples demonstrating the modern agentic stack on Databricks Apps.
-
-## Architecture
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    Databricks Apps                          │
-│                                                             │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────┐  │
-│  │  MCP Server  │  │  Hello World │  │  Deep Agents     │  │
-│  │  (shared)    │◄─│  Agent       │  │  Research Asst   │  │
-│  │              │◄─│              │  │                  │  │
-│  └──────────────┘  └──────┬───────┘  └────────┬─────────┘  │
-│                           │                    │            │
-│                    ┌──────▼────────────────────▼─────┐      │
-│                    │         Lakebase (Postgres)     │      │
-│                    │  Short-term: AsyncCheckpointSaver│      │
-│                    │  Long-term:  AsyncDatabricksStore│      │
-│                    └────────────────────────────────────┘      │
-└─────────────────────────────────────────────────────────────┘
-```
+End-to-end samples demonstrating agents with MCP tools and Lakebase memory on Databricks.
 
 ## What's Included
 
-| Directory | Description | Complexity |
+| Directory | Description | Deployment |
 |-----------|-------------|------------|
-| `mcp-server/` | Shared MCP tool server (time, calculator, employee lookup) | Setup |
-| `hello-world-agent/` | Basic agent with explicit memory tools, MCP integration | Introductory |
-| `deep-agents-app/` | Research assistant with subagents, CompositeBackend memory, task planning | Advanced |
-
-## Concepts Demonstrated
-
-| Concept | hello-world-agent | deep-agents-app |
-|---------|-------------------|-----------------|
-| **MCP Tools** | Consumed from shared server | Consumed from shared server |
-| **Short-term Memory** | `AsyncCheckpointSaver` (per thread) | `AsyncCheckpointSaver` (per thread) |
-| **Long-term Memory** | Explicit tools (`get/save/delete_user_memory`) with semantic search | `CompositeBackend` routing `/memories/` to `StoreBackend` |
-| **System Prompts** | Role, capabilities, guidelines | Role, capabilities, guidelines, response format |
-| **Subagents** | - | Researcher + Fact-checker via `SubAgentMiddleware` |
-| **Task Planning** | - | `TodoListMiddleware` for multi-step research |
-| **Serving** | MLflow AgentServer (`@invoke`/`@stream`) | MLflow AgentServer (`@invoke`/`@stream`) |
-| **Frontend** | Streamlit chat UI | Streamlit chat UI with multi-user presets |
-| **Evaluation** | MLflow GenAI (Safety, Correctness, Guidelines) | MLflow GenAI + custom `response_structure` scorer |
-
----
+| `mcp-server/` | Shared MCP tool server (time, calculator, employee lookup) | Databricks Apps |
+| `hello-world-agent/` | Agent with explicit memory tools + MCP integration | Databricks Apps |
+| `deep-agents-app/` | Research assistant with subagents, CompositeBackend memory, task planning | Databricks Apps |
+| `model-serving-agent/` | Agent with MCP tools + memory on a serving endpoint | Model Serving |
 
 ## Prerequisites
 
-Before deploying any sample, ensure you have:
+- Databricks workspace with **Apps** and **Lakebase** enabled
+- [Databricks CLI](https://docs.databricks.com/dev-tools/cli/index.html) installed and authenticated
+- Python 3.11+ and [uv](https://docs.astral.sh/uv/)
 
-- Databricks workspace with **Apps enabled**
-- [Databricks CLI](https://docs.databricks.com/dev-tools/cli/index.html) installed and configured (`databricks auth login`)
-- Python 3.11+
-- [uv](https://docs.astral.sh/uv/) installed (`curl -LsSf https://astral.sh/uv/install.sh | sh`)
+```bash
+# Authenticate — this creates a CLI profile
+databricks auth login --host https://<your-workspace-url>
+```
+
+Note your **CLI profile name** — you'll need it in Step 0. Run `cat ~/.databrickscfg` to see your profiles. The section name (e.g. `DEFAULT`, `my-workspace`) is what you'll use.
 
 ---
 
-## Part 1: Provision Lakebase
+## Step 0 — One-Time Configuration
 
-Both agent samples use Lakebase (managed PostgreSQL) for memory. Create a shared instance first.
+Before deploying anything, configure your workspace details. All commands below assume you're in the **repo root** directory.
 
-### Step 1: Install dependencies
+### 1. Set CLI profile in all three `databricks.yml` files
 
-```bash
-pip install databricks-sdk python-dotenv
-```
+Open each file and set `profile:` to your CLI profile name:
 
-### Step 2: Set environment variables
+- `mcp-server/databricks.yml`
+- `hello-world-agent/databricks.yml`
+- `deep-agents-app/databricks.yml`
 
-```bash
-export DATABRICKS_HOST=https://<your-workspace>.cloud.databricks.com
-export DATABRICKS_TOKEN=<your-pat-token>
-```
-
-### Step 3: Create the Lakebase instance
+### 2. Create `.env` files from templates
 
 ```bash
-python provision_lakebase.py --name agent-memory
+cp .env.example .env
+cp hello-world-agent/.env.example hello-world-agent/.env
+cp deep-agents-app/.env.example deep-agents-app/.env
 ```
 
-This takes a few minutes. When complete, note the instance name (`agent-memory`) — you'll use it in every subsequent step.
+Edit each `.env` and set `DATABRICKS_HOST` to your workspace URL (e.g. `https://adb-123456.7.azuredatabricks.net`).
 
-### Step 4: Initialize tables
-
-The tables are created when you run `setup_lakebase_permissions.py` later (after deploying each app). No action needed here yet.
+> The other values (`MCP_SERVER_URL`, `APP_URL`) get filled in after deployment — the README tells you when.
 
 ---
 
-## Part 2: Deploy the MCP Server
+## Part 1 — Provision Lakebase
 
-The MCP server hosts shared tools (time, calculator, employee lookup) consumed by both agent apps.
+Create a shared Lakebase instance for agent memory via the Databricks UI:
 
-### Step 1: Navigate to the MCP server directory
+1. Go to **Compute > Lakebase** and click **Create**
+2. Name it `agent-memory` and wait for it to become active
+
+> If you use a different name, update `instance_name` in `databricks.yml` and `LAKEBASE_INSTANCE_NAME` in `app.yaml` for each agent app.
+
+---
+
+## Part 2 — Deploy the MCP Server
 
 ```bash
 cd mcp-server
-```
-
-### Step 2: Deploy and start the app
-
-```bash
 databricks bundle deploy
 databricks bundle run mcp_server
+cd ..
 ```
 
-### Step 3: Get the app URL
+Get the app URL — you'll need it for the agent apps:
 
 ```bash
 databricks apps get agent-mcp-server --output json | jq -r '.url'
 ```
 
-Save this URL — both agent apps need it. The MCP endpoint will be `<app-url>/mcp`.
+**Now update the MCP URL** (append `/mcp` to the URL you just got):
 
-### Step 4: Verify it's running
+| File | Field to update |
+|------|-----------------|
+| `hello-world-agent/app.yaml` | `MCP_SERVER_URL` value |
+| `deep-agents-app/app.yaml` | `MCP_SERVER_URL` value |
 
-```bash
-databricks apps logs agent-mcp-server
-```
-
-Look for `App started successfully` in the logs.
+Example: if the URL is `https://agent-mcp-server-123.databricksapps.com`, set the value to `https://agent-mcp-server-123.databricksapps.com/mcp`.
 
 ---
 
-## Part 3: Deploy the Hello World Agent
+## Part 3 — Deploy the Hello World Agent
 
-A basic agent demonstrating MCP tool consumption, explicit long-term memory tools with semantic search, and short-term conversation memory.
-
-### Step 1: Navigate to the hello-world directory
+### 1. Deploy
 
 ```bash
 cd hello-world-agent
-```
-
-### Step 2: Configure your Lakebase instance name
-
-Update `databricks.yml` — replace `<your-lakebase-instance-name>` with your instance name (e.g., `agent-memory`):
-
-```yaml
-resources:
-  apps:
-    hello_world_agent:
-      name: "agent-hello-world"
-      ...
-      resources:
-        - name: "database"
-          database:
-            instance_name: "agent-memory"  # <-- your instance name
-```
-
-Update `app.yaml` — replace the placeholder values:
-
-```yaml
-env:
-  - name: MCP_SERVER_URL
-    value: "https://<your-mcp-app-url>/mcp"  # <-- from Part 2
-  - name: LAKEBASE_INSTANCE_NAME
-    value: "agent-memory"  # <-- your instance name
-```
-
-### Step 3: Create a local `.env` file (for local development)
-
-```bash
-cp .env.example .env
-# Edit .env with your values:
-#   DATABRICKS_HOST=https://<workspace>.cloud.databricks.com
-#   DATABRICKS_TOKEN=<your-token>
-#   MCP_SERVER_URL=https://<mcp-app-url>/mcp
-#   LAKEBASE_INSTANCE_NAME=agent-memory
-```
-
-### Step 4: Deploy and start the app
-
-```bash
 databricks bundle deploy
 databricks bundle run hello_world_agent
 ```
 
-### Step 5: Grant Lakebase permissions to the app's service principal
+### 2. Grant permissions
 
-Go back to the repo root and run:
+Still from `hello-world-agent/`:
 
 ```bash
-cd ..
-python setup_lakebase_permissions.py \
-  --app-name agent-hello-world \
-  --instance agent-memory
+# Initialize Lakebase tables + grant access to the app's service principal
+uv run python ../setup_lakebase_permissions.py --app-name agent-hello-world --instance agent-memory
+
+# Grant the app CAN_USE on the MCP server
+uv run python ../grant_mcp_permissions.py --agent-app agent-hello-world --mcp-app agent-mcp-server
 ```
 
-This does three things:
-1. Looks up the app's service principal
-2. Creates the store and checkpoint tables (if not already created)
-3. Grants the SP read/write access to those tables
+### 3. Test
 
-### Step 6: Verify the deployment
+Get the deployed app URL and add it to your `.env`:
 
-Get the app URL:
 ```bash
 databricks apps get agent-hello-world --output json | jq -r '.url'
 ```
 
-Open the URL in your browser to access the Streamlit chat UI. Try:
-- "What time is it?" (tests MCP tool)
-- "Remember my name is Alice" (tests long-term memory save)
-- Switch to a new thread, then ask "What do you know about me?" (tests cross-thread memory retrieval)
-
-### Step 7: Run evaluation (optional)
+Set `APP_URL` in `hello-world-agent/.env` to this URL, then:
 
 ```bash
-cd hello-world-agent
-uv run python eval.py
+uv run python test_agent.py
+```
+
+Or pass it directly: `uv run python test_agent.py --app-url https://<your-app-url>`
+
+Runs three demos:
+- **Short-term memory** — conversation context within a thread, lost in a new thread
+- **Long-term memory** — user facts saved to Lakebase, recalled across threads, deletable
+- **MCP tools** — time, calculator, employee lookup via the shared server
+
+Pick one with `--demo short-term`, `--demo long-term`, or `--demo tools`.
+
+```bash
+cd ..
 ```
 
 ---
 
-## Part 4: Deploy the Deep Agents Research Assistant
+## Part 4 — Deploy the Deep Agents Research Assistant
 
-An advanced agent with subagent delegation (researcher, fact-checker), CompositeBackend memory (ephemeral + persistent), task planning, and MCP tools.
-
-### Step 1: Navigate to the deep-agents directory
+### 1. Deploy
 
 ```bash
 cd deep-agents-app
-```
-
-### Step 2: Configure your Lakebase instance name
-
-Update `databricks.yml` — replace `<your-lakebase-instance-name>`:
-
-```yaml
-resources:
-  apps:
-    deep_agents_app:
-      name: "agent-research-assistant"
-      ...
-      resources:
-        - name: "database"
-          database:
-            instance_name: "agent-memory"  # <-- your instance name
-```
-
-Update `app.yaml` — replace the placeholder values:
-
-```yaml
-env:
-  - name: MCP_SERVER_URL
-    value: "https://<your-mcp-app-url>/mcp"  # <-- from Part 2
-  - name: LAKEBASE_INSTANCE_NAME
-    value: "agent-memory"  # <-- your instance name
-```
-
-### Step 3: Create a local `.env` file (for local development)
-
-```bash
-cp .env.example .env
-# Edit .env with your values (same as hello-world)
-```
-
-### Step 4: Deploy and start the app
-
-```bash
 databricks bundle deploy
 databricks bundle run deep_agents_app
 ```
 
-### Step 5: Grant Lakebase permissions to the app's service principal
+### 2. Grant permissions
+
+Still from `deep-agents-app/`:
 
 ```bash
-cd ..
-python setup_lakebase_permissions.py \
-  --app-name agent-research-assistant \
-  --instance agent-memory \
-  --skip-init  # Tables already created in Part 3
+# --skip-init because tables were already created in Part 3
+uv run python ../setup_lakebase_permissions.py --app-name agent-research-assistant --instance agent-memory --skip-init
+
+uv run python ../grant_mcp_permissions.py --agent-app agent-research-assistant --mcp-app agent-mcp-server
 ```
 
-> **Note:** Use `--skip-init` if you already initialized tables when deploying the hello-world agent. Both apps share the same Lakebase tables.
+### 3. Test
 
-### Step 6: Verify the deployment
+Get the deployed app URL:
 
-Get the app URL:
 ```bash
 databricks apps get agent-research-assistant --output json | jq -r '.url'
 ```
 
-Open the Streamlit UI. Try:
-- "Research the benefits of lakehouse architecture" (tests researcher subagent)
-- "Fact-check: Delta Lake supports ACID transactions" (tests fact-checker subagent)
-- "Remember I prefer bullet-point summaries" (tests long-term memory at `/memories/`)
-- Switch users in the sidebar to verify memory isolation
-
-### Step 7: Run evaluation (optional)
+Set `APP_URL` in `deep-agents-app/.env`, then:
 
 ```bash
-cd deep-agents-app
-uv run python eval.py
+uv run python test_agent.py
 ```
+
+Demos: `--demo memory`, `--demo research`, `--demo tools`.
+
+The research demo shows subagent delegation — look for `>> Delegated to subagent: researcher` in the output.
+
+```bash
+cd ..
+```
+
+---
+
+## Part 5 — Deploy the Model Serving Agent
+
+### 1. Configure
+
+Edit `model-serving-agent/log_and_deploy.py` — update the variables at the top:
+
+```python
+CATALOG = "main"                              # Your Unity Catalog
+SCHEMA = "agents"                             # Your schema
+MCP_SERVER_URL = "https://<your-mcp-url>/mcp" # From Part 2
+LAKEBASE_INSTANCE_NAME = "agent-memory"       # From Part 1
+```
+
+### 2. Create the UC schema (if it doesn't exist)
+
+From a Databricks notebook or SQL editor:
+
+```sql
+CREATE SCHEMA IF NOT EXISTS main.agents;
+```
+
+### 3. Upload and run
+
+Upload both `model-serving-agent/agent.py` and `model-serving-agent/log_and_deploy.py` to the same directory in your Databricks workspace. Then from a notebook in that directory:
+
+```python
+%pip install -U mlflow databricks-agents databricks-langchain databricks-mcp langgraph nest_asyncio
+dbutils.library.restartPython()
+%run ./log_and_deploy
+```
+
+This logs the agent to MLflow, registers it to Unity Catalog, and deploys to a Model Serving endpoint. Wait for the endpoint to become `READY` (can take a few minutes).
+
+### 4. Test
+
+From your local machine (requires `databricks-sdk` and `requests` installed):
+
+```bash
+cd model-serving-agent
+python test_endpoint.py
+```
+
+Runs three demos:
+- **Short-term memory** — conversation context within a thread, lost in a new thread
+- **Long-term memory** — user facts saved to Lakebase, recalled across threads, deletable
+- **MCP tools** — time, calculator, employee lookup via the shared server
+
+Pick one with `--demo short-term`, `--demo long-term`, or `--demo tools`.
 
 ---
 
 ## Redeploying After Code Changes
 
-When you make changes to any app, redeploy with the same two commands:
-
 ```bash
 cd <app-directory>
-databricks bundle deploy    # Syncs updated files to the workspace
-databricks bundle run <resource_key>  # Restarts the app with new code
+databricks bundle deploy
+databricks bundle run <resource_key>   # hello_world_agent | deep_agents_app | mcp_server
 ```
 
-| App | Directory | Resource Key |
-|-----|-----------|-------------|
-| MCP Server | `mcp-server/` | `mcp_server` |
-| Hello World Agent | `hello-world-agent/` | `hello_world_agent` |
-| Deep Agents Research Assistant | `deep-agents-app/` | `deep_agents_app` |
-
-> **Important:** `bundle deploy` uploads files but does **not** restart the app. You must also run `bundle run` or the app continues running old code.
-
-No need to re-run `setup_lakebase_permissions.py` — permissions persist across redeployments.
+`bundle deploy` uploads files. `bundle run` restarts the app. **Both are required.**
 
 ---
 
-## Querying the Agent API Directly
+## Querying the API Directly
 
-Both agents expose an API at `<app-url>/invocations`. You **must** use an OAuth token (not a PAT):
+Apps require an **OAuth token** (not a PAT):
 
 ```bash
-# Get OAuth token
-TOKEN=$(databricks auth token | jq -r '.access_token')
+TOKEN=$(databricks auth token --host https://<your-workspace-url> | jq -r '.access_token')
 
-# Query the agent
 curl -X POST <app-url>/invocations \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
     "input": [{"role": "user", "content": "What time is it?"}],
-    "custom_inputs": {"user_id": "user@example.com", "thread_id": "my-thread"}
+    "custom_inputs": {"user_id": "alice", "thread_id": "thread-1"}
   }'
 ```
 
 ---
 
+## Configuration Reference
+
+All files you need to edit, and when:
+
+| When | File | What to set |
+|------|------|-------------|
+| Step 0 | `*/databricks.yml` (×3) | `profile:` → your CLI profile name |
+| Step 0 | `*/.env` (×3) | `DATABRICKS_HOST` → workspace URL |
+| After Part 2 | `hello-world-agent/app.yaml` | `MCP_SERVER_URL` → MCP app URL + `/mcp` |
+| After Part 2 | `deep-agents-app/app.yaml` | `MCP_SERVER_URL` → MCP app URL + `/mcp` |
+| After Part 3 | `hello-world-agent/.env` | `APP_URL` → deployed app URL |
+| After Part 4 | `deep-agents-app/.env` | `APP_URL` → deployed app URL |
+| Before Part 5 | `model-serving-agent/log_and_deploy.py` | `MCP_SERVER_URL`, `CATALOG`, `SCHEMA` |
+
+Default values that work without changes (if you follow the naming in this guide):
+- Lakebase instance: `agent-memory`
+- Embedding endpoint: `databricks-gte-large-en`
+- LLM endpoint: `databricks-claude-opus-4-5`
+
+---
+
 ## Troubleshooting
 
-| Issue | Solution |
-|-------|----------|
-| `Failed to connect to Lakebase` | Verify `LAKEBASE_INSTANCE_NAME` in `app.yaml` matches your instance |
+| Issue | Fix |
+|-------|-----|
+| `more than one authorization method configured: oauth and pat` | Already handled in `start_server.py` — removes `DATABRICKS_TOKEN` when OAuth creds are present |
 | `permission denied for table store` | Re-run `setup_lakebase_permissions.py` for the app |
-| `Could not load MCP tools` | Verify `MCP_SERVER_URL` in `app.yaml` and that the MCP server app is running |
-| App not updating after deploy | Run `databricks bundle run <resource_key>` — deploy alone doesn't restart |
-| 302 redirect when querying API | Use OAuth token (`databricks auth token`), not a PAT |
-| App logs show import errors | Check `databricks apps logs <app-name>` for missing dependencies |
+| `Failed to load MCP tools` | Re-run `grant_mcp_permissions.py` and verify MCP server is running |
+| App not updating after deploy | Run `databricks bundle run <key>` after deploy |
+| 302 redirect querying API | Use OAuth token, not PAT |
+| `Error: Set APP_URL in .env` | Get URL with `databricks apps get <app-name> --output json \| jq -r '.url'` |
+| `Error: Set DATABRICKS_HOST` | Add your workspace URL to the `.env` file |
+| CLI profile not found | Run `cat ~/.databrickscfg` and update `profile:` in `databricks.yml` |
 
 ---
 
 ## Cleanup
 
-To tear down all resources:
-
 ```bash
-# Destroy apps (in any order)
-cd mcp-server && databricks bundle destroy --auto-approve
-cd hello-world-agent && databricks bundle destroy --auto-approve
-cd deep-agents-app && databricks bundle destroy --auto-approve
+cd mcp-server && databricks bundle destroy --auto-approve && cd ..
+cd hello-world-agent && databricks bundle destroy --auto-approve && cd ..
+cd deep-agents-app && databricks bundle destroy --auto-approve && cd ..
 
-# Delete Lakebase instance (optional — via Databricks UI)
-# Navigate to Compute > Lakebase > Delete instance
+# Model Serving (if deployed)
+databricks serving-endpoints delete mcp-agent-serving
 ```
