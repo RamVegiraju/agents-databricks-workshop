@@ -27,10 +27,12 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
 
-    w = WorkspaceClient(
-        host=os.environ["DATABRICKS_HOST"],
-        token=os.environ["DATABRICKS_TOKEN"],
-    )
+    host = os.environ.get("DATABRICKS_HOST", "")
+    if not host:
+        print("Error: Set DATABRICKS_HOST in .env (e.g. https://your-workspace.cloud.databricks.com)")
+        raise SystemExit(1)
+
+    w = WorkspaceClient(host=host)
 
     # Get the agent app's service principal
     agent_app = w.apps.get(args.agent_app)

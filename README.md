@@ -42,6 +42,7 @@ Open each file and set `profile:` to your CLI profile name:
 
 ```bash
 cp .env.example .env
+cp mcp-server/.env.example mcp-server/.env
 cp hello-world-agent/.env.example hello-world-agent/.env
 cp deep-agents-app/.env.example deep-agents-app/.env
 ```
@@ -54,16 +55,31 @@ Edit each `.env` and set `DATABRICKS_HOST` to your workspace URL (e.g. `https://
 
 ## Part 1 — Provision Lakebase
 
-Create a shared Lakebase instance for agent memory via the Databricks UI:
+Create a shared Lakebase instance for agent memory. This provides PostgreSQL-backed storage for both short-term memory (conversation checkpoints per thread) and long-term memory (user facts with semantic search via pgvector).
+
+**Option A — Via the Databricks UI:**
 
 1. Go to **Compute > Lakebase** and click **Create**
 2. Name it `agent-memory` and wait for it to become active
 
-> If you use a different name, update `instance_name` in `databricks.yml` and `LAKEBASE_INSTANCE_NAME` in `app.yaml` for each agent app.
+**Option B — Via the CLI script:**
+
+```bash
+# Requires DATABRICKS_HOST in .env (set in Step 0) and CLI auth configured
+python provision_lakebase.py
+```
+
+This creates an instance named `agent-memory` with default settings (`CU_1` capacity). Customize with `--name`, `--capacity CU_2`, or `--retention 14`.
+
+> If you use a name other than `agent-memory`, update `instance_name` in `databricks.yml` and `LAKEBASE_INSTANCE_NAME` in `app.yaml` for each agent app.
 
 ---
 
 ## Part 2 — Deploy the MCP Server
+
+The MCP (Model Context Protocol) server is a **shared tool server** that all agents connect to. It exposes utility tools — time, calculator, and employee lookup — over a standardized protocol. Instead of each agent implementing its own tools, they all call the same MCP server, keeping tool logic centralized and reusable.
+
+The server runs as a Databricks App and exposes an `/mcp` endpoint that agents connect to at runtime using `DatabricksMCPServer`.
 
 ```bash
 cd mcp-server
@@ -82,10 +98,23 @@ databricks apps get agent-mcp-server --output json | jq -r '.url'
 
 | File | Field to update |
 |------|-----------------|
+| `mcp-server/.env` | `MCP_SERVER_URL` value |
 | `hello-world-agent/app.yaml` | `MCP_SERVER_URL` value |
 | `deep-agents-app/app.yaml` | `MCP_SERVER_URL` value |
 
 Example: if the URL is `https://agent-mcp-server-123.databricksapps.com`, set the value to `https://agent-mcp-server-123.databricksapps.com/mcp`.
+
+### Test the MCP server
+
+Verify the tools are working before moving on:
+
+```bash
+cd mcp-server
+uv run python test_mcp_server.py
+cd ..
+```
+
+This lists the available tools and calls each one (time, calculator, employee lookup). You can also pass `--url` directly: `uv run python test_mcp_server.py --url https://<your-mcp-app-url>/mcp`.
 
 ---
 
@@ -225,6 +254,7 @@ From your local machine (requires `databricks-sdk` and `requests` installed):
 ```bash
 cd model-serving-agent
 python test_endpoint.py
+cd ..
 ```
 
 Runs three demos:
@@ -273,7 +303,8 @@ All files you need to edit, and when:
 | When | File | What to set |
 |------|------|-------------|
 | Step 0 | `*/databricks.yml` (×3) | `profile:` → your CLI profile name |
-| Step 0 | `*/.env` (×3) | `DATABRICKS_HOST` → workspace URL |
+| Step 0 | `*/.env` (×4) | `DATABRICKS_HOST` → workspace URL |
+| After Part 2 | `mcp-server/.env` | `MCP_SERVER_URL` → MCP app URL + `/mcp` |
 | After Part 2 | `hello-world-agent/app.yaml` | `MCP_SERVER_URL` → MCP app URL + `/mcp` |
 | After Part 2 | `deep-agents-app/app.yaml` | `MCP_SERVER_URL` → MCP app URL + `/mcp` |
 | After Part 3 | `hello-world-agent/.env` | `APP_URL` → deployed app URL |

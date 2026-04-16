@@ -17,6 +17,8 @@ mcp-server/
 ├── app.yaml            # Databricks App launch command
 ├── databricks.yml      # Databricks Asset Bundle config
 ├── pyproject.toml      # Python project metadata and dependencies
+├── test_mcp_server.py  # Test script for the deployed server
+├── .env.example        # Environment variable template
 ├── README.md
 └── server/
     ├── __init__.py
@@ -26,13 +28,29 @@ mcp-server/
     └── utils.py         # Workspace client and header forwarding utilities
 ```
 
-## Deploy to Databricks
+## Setup
+
+See the [main README](../README.md) for full deployment instructions (Part 2).
+
+Quick version:
 
 ```bash
-databricks bundle deploy && databricks bundle run mcp_server
+cp .env.example .env       # Edit with your workspace details
+databricks bundle deploy
+databricks bundle run mcp_server
 ```
 
-After deploying, note the app URL (e.g. `https://<workspace>.databricks.com/apps/agent-mcp-server`). Both agent samples need this as their `MCP_SERVER_URL` environment variable.
+## Testing
+
+After deploying, set `MCP_SERVER_URL` in `.env` to your deployed app URL + `/mcp`, then:
+
+```bash
+uv run python test_mcp_server.py
+```
+
+Or pass it directly: `uv run python test_mcp_server.py --url https://<your-mcp-app-url>/mcp`
+
+This lists all available tools and calls each one (time, calculator, employee lookup).
 
 ## Test Locally
 
@@ -42,12 +60,8 @@ Start the server:
 uv run start-server
 ```
 
-The server runs on `http://localhost:8000` by default. You can specify a different port with `--port`.
-
-To verify the server is running:
+The server runs on `http://localhost:8000` by default. Verify it's running:
 
 ```bash
 curl http://localhost:8000/healthz
 ```
-
-To test the MCP tools, use the `test_local.py` pattern from the agent samples, pointing at `http://localhost:8000/mcp/`.

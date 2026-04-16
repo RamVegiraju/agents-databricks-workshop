@@ -110,10 +110,12 @@ def main():
     embedding_endpoint = os.getenv("EMBEDDING_ENDPOINT", "databricks-gte-large-en")
     embedding_dims = int(os.getenv("EMBEDDING_DIMS", "1024"))
 
-    w = WorkspaceClient(
-        host=os.environ["DATABRICKS_HOST"],
-        token=os.environ["DATABRICKS_TOKEN"],
-    )
+    host = os.environ.get("DATABRICKS_HOST", "")
+    if not host:
+        print("Error: Set DATABRICKS_HOST in .env (e.g. https://your-workspace.cloud.databricks.com)")
+        raise SystemExit(1)
+
+    w = WorkspaceClient(host=host)
 
     print(f"\n[1/3] Resolving SP for app '{args.app_name}' ...")
     sp_client_id = get_sp_client_id(w, args.app_name)

@@ -34,10 +34,12 @@ def parse_args():
 def main():
     args = parse_args()
 
-    w = WorkspaceClient(
-        host=os.environ["DATABRICKS_HOST"],
-        token=os.environ["DATABRICKS_TOKEN"],
-    )
+    host = os.environ.get("DATABRICKS_HOST", "")
+    if not host:
+        print("Error: Set DATABRICKS_HOST in .env (e.g. https://your-workspace.cloud.databricks.com)")
+        raise SystemExit(1)
+
+    w = WorkspaceClient(host=host)
 
     print(f"\n[1/2] Creating Lakebase instance '{args.name}' ({args.capacity}) ...")
     print("      This may take a few minutes.")
