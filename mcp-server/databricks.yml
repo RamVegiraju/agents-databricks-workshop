@@ -1,0 +1,14 @@
+bundle:
+  name: mcp_server
+
+resources:
+  apps:
+    mcp_server:
+      name: "agent-mcp-server"
+      description: "Shared MCP tool server for agent samples"
+      source_code_path: ./
+
+targets:
+  dev:
+    mode: development
+    default: true
