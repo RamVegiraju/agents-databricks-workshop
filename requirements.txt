@@ -1,0 +1,21 @@
+# Core agent dependencies
+mlflow>=3.0.0
+langchain-core>=0.3.0
+databricks-langchain[memory]>=0.16.0
+langgraph>=0.3.0
+databricks-sdk>=0.40.0
+databricks-mcp>=0.3.0
+python-dotenv>=1.0.0
+
+# hello-world-agent
+streamlit>=1.38
+
+# deep-agents-app
+deepagents>=0.1
+
+# mcp-server
+fastapi>=0.110.0
+uvicorn>=0.29.0
+pydantic>=2.6.0
+fastmcp
+mcp>=1.26.0
