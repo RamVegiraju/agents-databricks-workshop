@@ -14,15 +14,50 @@ End-to-end samples demonstrating agents with MCP tools and Lakebase memory on Da
 ## Prerequisites
 
 - Databricks workspace with **Apps** and **Lakebase** enabled
-- [Databricks CLI](https://docs.databricks.com/dev-tools/cli/index.html) installed and authenticated
-- Python 3.11+ and [uv](https://docs.astral.sh/uv/)
+- Python 3.11+
+- [Databricks CLI](https://docs.databricks.com/dev-tools/cli/index.html)
+- [uv](https://docs.astral.sh/uv/) (Python package manager)
+
+### macOS / Linux
 
 ```bash
-# Authenticate — this creates a CLI profile
-databricks auth login --host https://<your-workspace-url>
+# Install uv
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Install Databricks CLI
+brew install databricks/tap/databricks   # macOS (Homebrew)
+curl -fsSL https://raw.githubusercontent.com/databricks/setup-cli/main/install.sh | sh  # Linux
+
+# Install root Python dependencies
+pip install -r requirements.txt
+
+# Verify installations
+python --version        # Should be 3.11+
+uv --version
+databricks --version
 ```
 
-Note your **CLI profile name** — you'll need it in Step 0. Run `cat ~/.databrickscfg` to see your profiles. The section name (e.g. `DEFAULT`, `my-workspace`) is what you'll use.
+### Windows (PowerShell)
+
+```powershell
+# Install uv
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+
+# Install Databricks CLI
+winget install Databricks.DatabricksCLI
+
+# Install root Python dependencies
+pip install -r requirements.txt
+
+# Verify installations
+python --version        # Should be 3.11+
+uv --version
+databricks --version
+```
+
+### Authenticate
+
+See **Step 0** below for full authentication and profile setup instructions.
 
 ---
 
@@ -30,15 +65,56 @@ Note your **CLI profile name** — you'll need it in Step 0. Run `cat ~/.databri
 
 Before deploying anything, configure your workspace details. All commands below assume you're in the **repo root** directory.
 
-### 1. Set CLI profile in all three `databricks.yml` files
+### 1. Authenticate with the Databricks CLI
 
-Open each file and set `profile:` to your CLI profile name:
+```bash
+databricks auth login --host https://<your-workspace-url>
+```
+
+When prompted for a profile name, either press Enter to accept the default or type a custom name. **Note the profile name** — you'll need it next.
+
+To verify your profiles at any time:
+
+```bash
+# macOS/Linux
+cat ~/.databrickscfg
+
+# Windows
+type %USERPROFILE%\.databrickscfg
+```
+
+Each `[section-name]` is a profile. For example:
+
+```ini
+[DEFAULT]
+host  = https://adb-1234567.11.azuredatabricks.net
+token = dapiXXXXXXXX
+
+[adb-1234567]
+host      = https://adb-1234567.11.azuredatabricks.net
+auth_type = databricks-cli
+```
+
+### 2. Set CLI profile in all three `databricks.yml` files
+
+Each app has a `databricks.yml` with a `profile` field that tells `databricks bundle` which workspace to deploy to. By default this is set to `DEFAULT`. **If your profile has a different name, update it in all three files:**
 
 - `mcp-server/databricks.yml`
 - `hello-world-agent/databricks.yml`
 - `deep-agents-app/databricks.yml`
 
-### 2. Create `.env` files from templates
+The line to change in each file:
+
+```yaml
+targets:
+  dev:
+    workspace:
+      profile: DEFAULT  # ← Change this to your profile name from step 1
+```
+
+> If you used the default profile name during `databricks auth login` and it saved as `DEFAULT`, no changes are needed.
+
+### 3. Create `.env` files from templates
 
 ```bash
 cp .env.example .env
@@ -47,7 +123,7 @@ cp hello-world-agent/.env.example hello-world-agent/.env
 cp deep-agents-app/.env.example deep-agents-app/.env
 ```
 
-Edit each `.env` and set `DATABRICKS_HOST` to your workspace URL (e.g. `https://adb-123456.7.azuredatabricks.net`).
+Edit each `.env` and set `DATABRICKS_HOST` to your workspace URL (e.g. `https://adb-123456789.11.azuredatabricks.net`).
 
 > The other values (`MCP_SERVER_URL`, `APP_URL`) get filled in after deployment — the README tells you when.
 
@@ -329,7 +405,16 @@ Default values that work without changes (if you follow the naming in this guide
 | 302 redirect querying API | Use OAuth token, not PAT |
 | `Error: Set APP_URL in .env` | Get URL with `databricks apps get <app-name> --output json \| jq -r '.url'` |
 | `Error: Set DATABRICKS_HOST` | Add your workspace URL to the `.env` file |
-| CLI profile not found | Run `cat ~/.databrickscfg` and update `profile:` in `databricks.yml` |
+| CLI profile not found | Run `cat ~/.databrickscfg` to see available profiles, then update `profile:` in all three `databricks.yml` files (see Step 0) |
+| `401 Unauthorized` on `bundle deploy` | Your token expired or `profile:` in `databricks.yml` points to the wrong profile. Re-run `databricks auth login` and verify the profile name matches |
+
+---
+
+## Resources
+
+- [Agents on Databricks Apps (YouTube playlist)](https://www.youtube.com/watch?v=ynwq6QIzQqg&list=PLThJtS7RDkOe18wsscifG80moTZIck-EM)
+- [Agents on Model Serving (YouTube)](https://www.youtube.com/watch?v=bFE29k9tBRI&list=PLThJtS7RDkOe18wsscifG80moTZIck-EM&index=8)
+- [Custom Agents Documentation](https://docs.databricks.com/aws/en/generative-ai/agent-framework/author-agent)
 
 ---
 

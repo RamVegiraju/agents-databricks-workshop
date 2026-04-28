@@ -4,7 +4,7 @@ env:
   - name: MLFLOW_TRACKING_URI
     value: "databricks"
   - name: MCP_SERVER_URL
-    value: "https://<your-mcp-app-url>/mcp"  # Update after deploying mcp-server (Part 2)
+    value: "https://agent-mcp-server-984752964297111.11.azure.databricksapps.com/mcp"  # Update after deploying mcp-server (Part 2)
   - name: LAKEBASE_INSTANCE_NAME
     value: "agent-memory"
   - name: EMBEDDING_ENDPOINT

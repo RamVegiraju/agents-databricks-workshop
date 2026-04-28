@@ -5,6 +5,8 @@
 # Python
 __pycache__/
 *.pyc
+*.egg-info/
+**/*.egg-info/
 venv/
 .venv/
 **/venv/
